@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VRKeyboard</title>
+    <script src="https://threejs.org/build/three.min.js"></script>
+    <script src="./scripts/vrkeyboard.umd.js"></script>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: gray;
+        }
+    </style>
+</head>
+
+<body>
+    <script>
+        var camera, scene, renderer;
+        var canvas, texture;
+        var mesh;
+        var raycaster = new THREE.Raycaster();
+        var mouse = new THREE.Vector2(-1, -1);
+        var string = "Type text..";
+        var firstEdit = true;
+        var textObject, font, loader;
+
+        init();
+        animate();
+
+        function init() {
+            canvas = window.VRKeyboard.canvas;
+            window.VRKeyboard.init({
+                resolution: 2,
+                aspect: 1
+            });
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 1000);
+
+            setCameraPosition();
+
+            scene = new THREE.Scene();
+
+            var dirLight = new THREE.DirectionalLight( 0xffffff, 0.8 );
+				dirLight.position.set( 0, 0, 1 ).normalize();
+				scene.add( dirLight );
+
+            renderer = new THREE.WebGLRenderer({
+                antialias: true
+            });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            document.body.appendChild(renderer.domElement);
+
+            texture = new THREE.CanvasTexture(canvas)
+            // below two lines ensure the highest possible render quality of our texture
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            texture.minFilter = THREE.LinearFilter;
+
+            var geometry = new THREE.PlaneBufferGeometry(100, 100, 32);
+            var material = new THREE.MeshBasicMaterial({map:texture, transparent:true});
+
+            mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            //
+
+            window.addEventListener('resize', onWindowResize, false);
+            document.addEventListener('mousemove', onMouseMove, {passive:false});
+            document.addEventListener('touchmove', onMouseMove, {passive:false});
+            document.addEventListener('mousedown', onMouseDown, {passive:false});
+            document.addEventListener('touchstart', onMouseDown, {passive:false});
+            document.addEventListener('mouseup', onMouseUp, false);
+            document.addEventListener('touchend', onMouseUp, false);
+
+            //
+            createTextObject();
+
+
+            window.VRKeyboard.events.addEventListener(window.VRKeyboard.events.KEYDOWN, function(event){
+                if(firstEdit) string = '';
+                firstEdit = false;
+                if(event.char){
+                    string += event.char;
+                }else if(event.key === 'bksp'){
+                    string = string.substr(0, string.length-1);
+                }
+                createTextObject();
+            })
+
+        }
+
+        var vec = new THREE.Vector3();
+        var box = new THREE.Box3();
+        var material = new THREE.MeshPhongMaterial( { color: 0xffffff } );
+
+        function createTextObject(){
+            function buildText(){
+                var geometry = new THREE.TextGeometry( string, {
+                    font,
+                    size: 12,
+                    height: 5,
+                    curveSegments: 4,
+                } );
+                textObject = new THREE.Mesh(geometry, material)
+
+                box.setFromObject( textObject );
+                box.getSize(vec);
+
+                textObject.geometry.translate( -vec.x/2, 0, 0 );
+
+                scene.add(textObject);
+
+                setCameraPosition();
+            }
+
+            if(textObject === undefined && loader === undefined){
+                loader = new THREE.FontLoader();
+                loader.load( './fonts/droid_serif_regular.typeface.json', function ( _font ) {
+                    font = _font;
+                    buildText();
+                } );
+            }
+            if(font){
+                if(textObject){
+                    scene.remove(textObject);
+                }
+                buildText();
+            }
+
+        }
+
+        function setCameraPosition(){
+            camera.position.y = 20;
+            if(textObject) textObject.position.y = 30;
+
+            if(window.innerWidth>window.innerHeight){
+                camera.position.z = 80;
+            }else{
+                camera.position.z = 130;
+            }
+        }
+
+        function onMouseDown(event) {
+            setMousePosition(event);
+            window.VRKeyboard.setMouseDown(true);
+
+            // we prevent default to not have the "save image" context menu open on mobile
+            event.preventDefault();
+        }
+
+        function onMouseUp(event) {
+            if(event.touches){
+                mouse.x = -1000;
+                // since on mobile dont have a mouse, after a touch we should move the "mouse" out of the screen to not highlight buttons
+            }
+            window.VRKeyboard.setMouseDown(false);
+        }
+
+        function onMouseMove(event) {
+            setMousePosition(event);
+        }
+        function setMousePosition(event){
+            var clientX, clientY;
+            if(event.touches){
+                clientX = event.touches[0].clientX;
+                clientY = event.touches[0].clientY;
+            }else{
+                clientX = event.clientX;
+                clientY = event.clientY;
+            }
+
+            // calculate mouse position in normalized device coordinates
+            // (-1 to +1) for both components
+
+            mouse.x = (clientX / window.innerWidth) * 2 - 1;
+            mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+        }
+
+        function onWindowResize() {
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            setCameraPosition();
+        }
+
+        function animate(time) {
+
+            requestAnimationFrame(animate);
+            // make sure to always render before checking collisions
+            renderer.render(scene, camera);
+
+            // rotate our plane
+            const hz = 2000;
+            const ampl = 0.4;
+            mesh.rotation.x = Math.cos(time / hz) * ampl;
+            mesh.rotation.y = Math.sin(time / hz) * ampl;
+            if(textObject){
+                textObject.rotation.x = Math.cos(time / hz) * ampl;
+                textObject.rotation.y = Math.sin(time / hz) * ampl;
+            }
+
+            raycaster.setFromCamera(mouse, camera);
+
+            // calculate objects intersecting the picking ray
+            var intersects = raycaster.intersectObjects([mesh]);
+
+            // default the uvPos to 0,0 to ensure no buttons being highlighted when there is no intersection
+            var uvPos = new THREE.Vector2();
+            for (var i = 0; i < intersects.length; i++) {
+
+                // if we intersect our plane, grab the uv from the material
+                var intersect = intersects[0];
+                var material = intersect.object.material;
+                var uvPos = material.map.transformUv(intersect.uv);
+            }
+            // here we set the keyboards internal mouse position to the uv
+            window.VRKeyboard.setMousePosFromUV(uvPos.x, uvPos.y);
+
+            // detect if the keyboard texture is dirty, if so we need to update our canvas texture
+            if (window.VRKeyboard.textureDirty) {
+                texture.needsUpdate = true;
+                window.VRKeyboard.setTextureDirty(false);
+            }
+
+
+        }
+    </script>
+</body>
+
+</html>

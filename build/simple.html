@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VRKeyboard</title>
+    <script src='./scripts/vrkeyboard.umd.js'></script>
+    <style>
+        html, body{
+            margin:0;
+            padding:0;
+            overflow:hidden;
+            background-color: gray;
+            width:100vw;
+            height:100vh;
+        }
+        input{
+            width:200px;
+            position:absolute;
+            top:40%;
+            left:50%;
+            transform:translate(-50%, -50%);
+        }
+        input:nth-child(2){
+            top:30%;
+        }
+    </style>
+</head>
+<body>
+    <input placeholder="Write text here..." inputmode="none"></input>
+    <input placeholder="Write text here..." inputmode="none"></input>
+    <script>
+        const canvas = window.VRKeyboard.canvas;
+        canvas.style.position = 'absolute';
+        canvas.style.bottom = '0px';
+
+        // we align the keyboard at the bottom of draw canvas (default is center)
+        window.VRKeyboard.init({align:'bottom'});
+        window.VRKeyboard.addListeners();
+
+        // by setting the height to 0 the keyboard will calculate the minimum height it requires to display based on the configured buttonHeight and margin
+        // any height below the minimum required height will force the minimum height.
+        window.VRKeyboard.setScreenSizeInPixels(window.innerWidth, 0, window.devicePixelRatio);
+
+        window.onresize = ()=>{
+            window.VRKeyboard.setScreenSizeInPixels(window.innerWidth, 0, window.devicePixelRatio);
+        }
+        // make sure to appendChild after setScreenSize to ensure innerWidth === document.documentElement.clientWidth
+        document.body.appendChild(canvas);
+
+        window.VRKeyboard.events.addEventListener(window.VRKeyboard.events.KEYDOWN, function(event){
+            console.log(event);
+            console.log(document.activeElement)
+
+            if(event.char){
+                document.activeElement.value += event.char;
+            }else if(event.key === 'bksp'){
+                document.activeElement.value = document.activeElement.value.substr(0, document.activeElement.value.length-1);
+            }
+
+        })
+
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VRKeyboard</title>
+    <script src='./scripts/vrkeyboard.js'></script>
+    <style>
+        html, body{
+            margin:0;
+            padding:0;
+            overflow:hidden;
+            background-color: gray;
+            width:100vw;
+            height:100vh;
+        }
+        input{
+            width:200px;
+            position:absolute;
+            top:40%;
+            left:50%;
+            transform:translate(-50%, -50%);
+        }
+        input:nth-child(2){
+            top:30%;
+        }
+    </style>
+</head>
+<body>
+    <input placeholder="Write text here..." inputmode="none"></input>
+    <input placeholder="Write text here..." inputmode="none"></input>
+    <script>
+        const canvas = window.VRKeyboard.canvas;
+        canvas.style.position = 'absolute';
+        canvas.style.bottom = '0px';
+
+        // we align the keyboard at the bottom of draw canvas (default is center)
+        window.VRKeyboard.init({align:'bottom'});
+        window.VRKeyboard.addListeners();
+
+        // by setting the height to 0 the keyboard will calculate the minimum height it requires to display based on the configured buttonHeight and margin
+        // any height below the minimum required height will force the minimum height.
+        window.VRKeyboard.setScreenSizeInPixels(window.innerWidth, 0, window.devicePixelRatio);
+
+        window.onresize = ()=>{
+            window.VRKeyboard.setScreenSizeInPixels(window.innerWidth, 0, window.devicePixelRatio);
+        }
+        // make sure to appendChild after setScreenSize to ensure innerWidth === document.documentElement.clientWidth
+        document.body.appendChild(canvas);
+
+        window.VRKeyboard.events.addEventListener(window.VRKeyboard.events.KEYDOWN, function(event){
+            if(event.char){
+                document.activeElement.value += event.char;
+            }else if(event.key === 'bksp'){
+                document.activeElement.value = document.activeElement.value.substr(0, document.activeElement.value.length-1);
+            }
+        })
+
+    </script>
+</body>
+</html>

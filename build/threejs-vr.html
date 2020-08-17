@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VRKeyboard</title>
+    <style>
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: gray;
+        }
+    </style>
+</head>
+
+<body>
+    <script type="module">
+        import * as THREE from "./scripts/three.module.js";
+        import { VRButton } from "./scripts/VRButton.js";
+        import * as VRKeyboard from   "./scripts/vrkeyboard.esm.js";
+
+
+        var camera, scene, renderer;
+        var canvas, texture;
+        var mesh;
+        var raycaster = new THREE.Raycaster();
+        var string = "Type text..";
+        var firstEdit = true;
+        var textObject, font, loader;
+        var controller1, controller2, cursor;
+
+        init();
+
+        function init() {
+            canvas = VRKeyboard.canvas;
+            VRKeyboard.init({
+                resolution: 2,
+                aspect: 1
+            });
+
+            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 0;
+
+            scene = new THREE.Scene();
+
+            var dirLight = new THREE.DirectionalLight( 0xffffff, 0.8 );
+				dirLight.position.set( 0, 0, 1 ).normalize();
+				scene.add( dirLight );
+
+            renderer = new THREE.WebGLRenderer({
+                antialias: true
+            });
+            renderer.setPixelRatio(window.devicePixelRatio);
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.xr.enabled = true;
+
+            var vrButton = VRButton.createButton( renderer );
+            document.body.appendChild(vrButton);
+
+
+            document.body.appendChild(renderer.domElement);
+
+            texture = new THREE.CanvasTexture(canvas)
+            // below two lines ensure the highest possible render quality of our texture
+            texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            texture.minFilter = THREE.LinearFilter;
+
+            var geometry = new THREE.PlaneBufferGeometry(100, 100, 32);
+            var material = new THREE.MeshBasicMaterial({map:texture, transparent:true});
+
+            mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+            //
+            renderer.setAnimationLoop( animate );
+
+
+            window.addEventListener('resize', onWindowResize, false);
+            renderer.xr.addEventListener('sessionstart', startXRSession);
+
+            //
+            createTextObject();
+
+
+            VRKeyboard.events.addEventListener(VRKeyboard.events.KEYDOWN, function(event){
+                if(firstEdit) string = '';
+                firstEdit = false;
+                if(event.char){
+                    string += event.char;
+                }else if(event.key === 'bksp'){
+                    string = string.substr(0, string.length-1);
+                }
+                createTextObject();
+            })
+
+        }
+        function startXRSession(){
+            controller1 = renderer.xr.getController( 0 );
+            controller2 = renderer.xr.getController( 1 );
+
+            scene.add( controller2 );
+            scene.add( controller1 );
+
+
+            controller1.addEventListener('selectstart', selectDown);
+            controller1.addEventListener('selectend', selectUp);
+
+            // add laser pointer to right controller
+            var laserMaterial = new THREE.LineBasicMaterial({color:0xFFFFFF, transparent: false});
+            var g = new THREE.Geometry();
+            g.vertices.push( new THREE.Vector3(0,0,-2.5) );
+            g.vertices.push( new THREE.Vector3(0,0,0) );
+            controller1.add(new THREE.Line( g, laserMaterial ));
+
+            // add a cursor to the right controller
+            var pointerMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, transparent: false});
+            var geometry = new THREE.CircleGeometry(0.005, 12);
+            cursor = new THREE.Mesh(geometry, pointerMaterial);
+            scene.add(cursor);
+
+            // add keyboard to left controller
+            controller2.add(mesh);
+            mesh.position.z = -.3;
+            mesh.scale.setScalar(0.01);
+
+        }
+
+        function selectDown(){
+            VRKeyboard.setMouseDown(true);
+        }
+
+        function selectUp(){
+            VRKeyboard.setMouseDown(false);
+        }
+
+        var vec = new THREE.Vector3();
+        var box = new THREE.Box3();
+        var material = new THREE.MeshPhongMaterial( { color: 0xffffff } );
+
+        function createTextObject(){
+            function buildText(){
+                var geometry = new THREE.TextGeometry( string, {
+                    font,
+                    size: 100,
+                    height: 5,
+                    curveSegments: 4,
+                } );
+                textObject = new THREE.Mesh(geometry, material)
+
+                box.setFromObject( textObject );
+                box.getSize(vec);
+
+                textObject.geometry.translate( -vec.x/2, 0, 0 );
+                textObject.position.z = -500;
+
+                scene.add(textObject);
+            }
+
+            if(textObject === undefined && loader === undefined){
+                loader = new THREE.FontLoader();
+                loader.load( './fonts/droid_serif_regular.typeface.json', function ( _font ) {
+                    font = _font;
+                    buildText();
+                } );
+            }
+            if(font){
+                if(textObject){
+                    scene.remove(textObject);
+                }
+                buildText();
+            }
+
+        }
+
+        function onWindowResize() {
+
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+
+            renderer.setSize(window.innerWidth, window.innerHeight);
+
+            setCameraPosition();
+        }
+        var raycastDestination = new THREE.Vector3();
+        var quat = new THREE.Quaternion();
+
+        function animate(time) {
+            // make sure to always render before checking collisions
+            renderer.render(scene, camera);
+
+            // rotate our plane
+            const hz = 4000;
+            const ampl = 0.2;
+            if(textObject){
+                textObject.rotation.x = Math.cos(time / hz) * ampl;
+                textObject.rotation.y = Math.sin(time / hz) * ampl;
+            }
+
+            if(controller1){
+                // point raycastDestination to controller forward
+                raycastDestination.set(0, 0, -1);
+                controller1.getWorldQuaternion(quat);
+                raycastDestination.applyQuaternion(quat);
+
+                raycaster.set(controller1.position, raycastDestination);
+
+                // calculate objects intersecting the picking ray
+                var intersects = raycaster.intersectObjects([mesh]);
+
+                // default the uvPos to 0,0 to ensure no buttons being highlighted when there is no intersection
+                var uvPos = new THREE.Vector2();
+                cursor.visible = false;
+                for (var i = 0; i < intersects.length; i++) {
+
+                    // if we intersect our plane, grab the uv from the material
+                    var intersect = intersects[0];
+                    var material = intersect.object.material;
+                    var uvPos = material.map.transformUv(intersect.uv);
+                    VRKeyboard.setMousePosFromUV(uvPos.x, uvPos.y);
+
+                    // position the cursor a little bit in front of the mesg
+                    raycastDestination.set(0, 0, -1);
+                    raycastDestination.applyQuaternion(quat);
+                    raycastDestination.multiplyScalar(intersect.distance-0.001);
+                    raycastDestination.add(controller1.position);
+
+                    if(VRKeyboard.activeElement && intersect.face){
+                        // rotate the cursor to the surface normal
+                        const n = intersect.face.normal.clone();
+                        n.transformDirection( intersect.object.matrixWorld );
+                        n.multiplyScalar( 10 );
+                        n.add( intersect.point );
+
+                        cursor.visible = true;
+                        cursor.position.copy(raycastDestination);
+                        cursor.lookAt(n);
+                    }
+                }
+
+                // detect if the keyboard texture is dirty, if so we need to update our canvas texture
+                if (VRKeyboard.textureDirty) {
+                    texture.needsUpdate = true;
+                    VRKeyboard.setTextureDirty(false);
+                }
+            }
+
+
+        }
+    </script>
+</body>
+
+</html>
