@@ -95,14 +95,15 @@ export const init = _config =>{
 
 	Object.assign(config, _config);
 	layout.init();
-
+	layout.setScreenSizeFromAspectRatio();
+	layout.selectLanguage(config.language);
+	
 	swipe.load().then(()=>{
 	});
 
 	loadSVGs().then(()=>{
 		draw();
 	})
-	layout.setScreenSizeFromAspectRatio();
-	layout.selectLanguage(config.language);
+
 
 }

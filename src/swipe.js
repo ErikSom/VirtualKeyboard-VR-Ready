@@ -17,10 +17,10 @@ let lastBranchedChar = null;
 export const load = ()=>{
 	initialized = false;
 	return new Promise((resolve, reject)=>{
-		if(map[config.language]) return resolve();
-		map[config.language] = {};
+		if(map[state.selectedLanguage]) return resolve();
+		map[state.selectedLanguage] = {};
 		const worldListFolder = './wordlist/'
-		fetch(`${worldListFolder}${config.language}${'.txt'}`).then(response => response.text())
+		fetch(`${worldListFolder}${state.selectedLanguage}${'.txt'}`).then(response => response.text())
 		.then(data => {
 			mapText(data);
 			initialized = true;
@@ -33,18 +33,20 @@ export const load = ()=>{
 }
 
 const mapText = data =>{
+	buildSpecialCharacterMap();
+
 	const words = data.toString().split("\n")
     for(let i = 0; i<words.length; i++) {
-		const word = words[i].replace('\r', '');;
+		const word = words[i].replace('\r', '');
 		let targetObject = null;
 		let previousChar = null;
 		const targetLength = Math.min(word.length, config.swipeMaxWordDepth);
 		for(let j = 0; j<targetLength; j++){
-			const char = word.charAt(j)
+			const char = getCorrectChar(word.charAt(j));
 			if(char !== previousChar){
 				if(targetObject === null){
-					if(map[config.language][char] === undefined) map[config.language][char] = {}
-					targetObject = map[config.language][char];
+					if(map[state.selectedLanguage][char] === undefined) map[state.selectedLanguage][char] = {}
+					targetObject = map[state.selectedLanguage][char];
 				}else{
 					if(targetObject[char] === undefined) targetObject[char] = {}
 					targetObject = targetObject[char];
@@ -57,6 +59,19 @@ const mapText = data =>{
 			}
 		}
 	}
+}
+const buildSpecialCharacterMap = ()=>{
+	map[state.selectedLanguage].specialCharacterMap = {};
+	const { specialCharacterMap } = map[state.selectedLanguage];
+	state.layout.forEach(row=>{
+		row.forEach(key=>{
+			if(key.char.length <= 2 && key.extra){
+				key.extra.forEach(extraKey => {
+					specialCharacterMap[extraKey.char] = key.char;
+				})
+			}
+		});
+	})
 }
 
 export const move = () => {
@@ -81,6 +96,13 @@ export const end = () => {
 	if(state.swipeActive) getSuggestions();
 	reset();
 }
+const getCorrectChar = char =>{
+	let correctChar = map[state.selectedLanguage].specialCharacterMap[char];
+	if(correctChar !== undefined){
+		 return correctChar;
+	}
+	return char;
+}
 const pushChar = () => {
 	const key = state.activeElement
 
@@ -92,7 +114,7 @@ const pushChar = () => {
 }
 const processChar = char=>{
 	if(activeBranches.length === 0){
-		const path = map[config.language][char];
+		const path = map[state.selectedLanguage][char];
 		processPath(path);
 	}else{
 		currentBranch = [];
@@ -152,13 +174,17 @@ const getAngleDifference = (a,b)=>{
 }
 const getSuggestions = ()=>{
 	const lastChar = charArray[charArray.length-1];
-	const suggestions = wordsFound.filter(word=>{
-		const lastCharInWord = word.charAt(word.length-1);
+	// filter fpr words that match the last letter pressed
+	let suggestions = wordsFound.filter(word=>{
+		const lastCharInWord = getCorrectChar(word.charAt(word.length-1));
 		return lastCharInWord === lastChar;
 	});
+	// sort by unique characters
 	suggestions.sort(function(a, b){
-		return b.length - a.length;
+		return helper.uniqueCharacters(b).length - helper.uniqueCharacters(a).length;
 	});
+	// deduplicate
+	suggestions = suggestions.filter((v, i, a) => a.indexOf(v) === i);
 	state.suggestions = suggestions;
 }
 const resetAngleFinder = ()=>{
