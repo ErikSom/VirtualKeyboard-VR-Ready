@@ -1,0 +1,26 @@
+const state = {
+	canvas:document.createElement('canvas'),
+	activeElement:null,
+	activePopupElement:null,
+	mouseDown:false,
+	mousePos:{x:0, y:0},
+	textureDirty:true,
+	selectedLanguage:null,
+	layout:null,
+	currentLayout:null,
+	margin:null,
+	buttonSize:null,
+	buttonHeight:null,
+	shiftDown:false,
+	shiftDownTime:null,
+	perfmaShift:false,
+	keyPopup:false,
+	widthUnits:null,
+	holdTimeout:null,
+	bkspInterval:null,
+	swipeActive:false,
+	swipePoints:[],
+	suggestions:[],
+
+}
+export default state;

@@ -1,5 +1,5 @@
 import EventDispatcher from './utils/EventDispatcher'
-import {languages} from './layouts';
+import config from './config'
 
 export const dispatcher = new EventDispatcher();
 
@@ -12,7 +12,7 @@ export const removeEventListener = (type, listener) => {
 }
 export const dispatchEvent = (key, shiftDown) =>{
 	let char = null;
-	if(key.length <= 2 && !languages.includes(key.toLowerCase())) char = shiftDown ? key.toUpperCase() : key;
+	if(key.length <= 2 && !config.languages.includes(key.toLowerCase())) char = shiftDown ? key.toUpperCase() : key;
 
 	if(key === 'space') char = ' ';
 	dispatcher.dispatchEvent({type:KEYDOWN, key, char});
