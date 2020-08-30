@@ -6,6 +6,7 @@ import stripCode from "rollup-plugin-strip-code"
 import strip from '@rollup/plugin-strip';
 import resolve from 'rollup-plugin-node-resolve';
 import conditional from 'rollup-plugin-conditional';
+import copy from 'rollup-plugin-copy';
 
 
 const isProduction = process.env.NODE_ENV === 'production';
@@ -36,6 +37,12 @@ export default [
 				terser(),
 				]
 			),
+			copy({
+				targets: [
+					{ src: 'static/*', dest: 'build/' },
+				],
+				verbose:true,
+			}),
 		],
 	},
 	{

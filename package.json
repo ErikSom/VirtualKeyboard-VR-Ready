@@ -34,5 +34,12 @@
   },
   "repository": "github:ErikSom/VirtualKeyboard-VR-Ready",
   "devDependencies": {},
-  "keywords":["keyboard", "ui", "vr", "webxr", "threejs", "customizable"]
+  "keywords": [
+    "keyboard",
+    "ui",
+    "vr",
+    "webxr",
+    "threejs",
+    "customizable"
+  ]
 }

@@ -8,6 +8,7 @@ const config = {
 	language:'en',
 	font:'sans-serif',
 	align: 'center',
+	swipe:true,
 	colors:{
 		idle:"#3f4a52",
 		hover:"#2d343a",

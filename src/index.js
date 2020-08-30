@@ -2,6 +2,7 @@ import {layouts, languages} from './layouts'
 import {loadSVGs, drawSVG} from './svgs'
 import config from './config'
 import * as events from './events'
+import * as swipe from './swipe';
 export {events};
 
 export const canvas = document.createElement('canvas');
@@ -50,6 +51,10 @@ export const setMouseDown = (bool, x, y)=>{
 	mouseDown = bool;
 	if(x !== undefined) setMousePos(x, y);
 	else setMousePos(mousePos.x, mousePos.y);
+
+	if(!mouseDown){
+		swipe.end(activeElement);
+	}
 }
 
 export const setMousePosFromUV = (x, y)=>{
@@ -63,6 +68,10 @@ export const setMousePos = (x, y)=>{
 	let foundKey;
 	if(keyPopup) foundKey = checkPopupKeyCollision();
 	if(!foundKey) foundKey = checkKeyboardCollision();
+
+	if(mouseDown){
+		swipe.move(activeElement, x, y);
+	}
 
 	if(!foundKey && activeElement){
 		clearActiveElement();
@@ -133,6 +142,9 @@ export const addListeners = ()=>{
 
 
 export const init = _config =>{
+	swipe.load('en').then(()=>{
+	});
+
 	loadSVGs().then(()=>{
 		draw();
 	})
