@@ -30,8 +30,44 @@ const drawText = (x,y,w,h, text, fontSize)=>{
 		const textY = h/2;
 		ctx.fillText( text, x+textX, y+textY );
 }
+const drawCircleLine = (sx, sy, sr, ex, ey, er, a) =>{
+	const angle = helper.getAngle({x:ex, y:ey}, {x:sx,y:sy})+ Math.PI/2;
+	ctx.fillStyle = config.colors.down;
+	const path = new Path2D();
+	path.arc(sx, sy, sr, angle, angle + Math.PI);
+	path.arc(ex, ey, er, angle + Math.PI, angle);
+	path.closePath();
+	ctx.beginPath();
+	ctx.fill(path);
+	ctx.closePath();
+	return ctx;
+}
+const drawSwipe = ()=>{
+	if(state.swipePoints.length>1){
+
+		if(!state.swipeDrawInterval) state.swipeDrawInterval = setInterval(draw, 100);
+		for(let i = 1; i<state.swipePoints.length; i++){
+			const sp = state.swipePoints[i-1];
+			const spProgress = (Date.now()-sp.t) / config.swipeDrawingLifeTime;
+			const sr = config.swipeDrawingSize * (1-spProgress);
+			const ep = state.swipePoints[i];
+			const epProgress = (Date.now()-ep.t) / config.swipeDrawingLifeTime;
+			const er = config.swipeDrawingSize * (1-epProgress);
+			if(spProgress>=1){
+				state.swipePoints.splice(i-1, 1);
+				i--;
+				continue;
+			}
+			drawCircleLine(sp.x, sp.y, sr, ep.x, ep.y, er);
+		}
+	}else if(state.swipeDrawInterval){
+		clearInterval(state.swipeDrawInterval);
+		state.swipeDrawInterval = null;
+	}
+}
 
 const draw = ()=>{
+
 	const startY = helper.calculateStartY();
 
 	ctx.clearRect(0, 0, element.width, element.height);
@@ -125,6 +161,9 @@ const draw = ()=>{
 			y -= state.buttonHeight;
 		}
 	}
+
+	if(config.swipe) drawSwipe();
+
 	state.textureDirty = true;
 }
 export default draw;

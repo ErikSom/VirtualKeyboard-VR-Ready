@@ -20,6 +20,7 @@ const state = {
 	bkspInterval:null,
 	swipeActive:false,
 	swipePoints:[],
+	swipeDrawInterval:null,
 	suggestions:[],
 
 }
