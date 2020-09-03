@@ -25,10 +25,20 @@ const drawText = (x,y,w,h, text, fontSize)=>{
 	ctx.font = `${fontSize}px ${config.font}`;
 	ctx.textBaseline = 'middle';
 	if(!text) return;
-		const textSize = ctx.measureText(text);
-		const textX = (w-textSize.width)/2;
-		const textY = h/2;
-		ctx.fillText( text, x+textX, y+textY );
+
+	if(text.length>2){
+		let metrics = ctx.measureText(text);
+		while(fontSize> 4 && metrics.width>w-state.margin*2){
+			fontSize--;
+			ctx.font = `${fontSize}px ${config.font}`;
+			metrics = ctx.measureText(text);
+		}
+	}
+
+	const textSize = ctx.measureText(text);
+	const textX = (w-textSize.width)/2;
+	const textY = h/2;
+	ctx.fillText( text, x+textX, y+textY );
 }
 const drawCircleLine = (sx, sy, sr, ex, ey, er, a) =>{
 	const angle = helper.getAngle({x:ex, y:ey}, {x:sx,y:sy})+ Math.PI/2;
@@ -45,7 +55,7 @@ const drawCircleLine = (sx, sy, sr, ex, ey, er, a) =>{
 const drawSwipe = ()=>{
 	if(state.swipePoints.length>1){
 
-		if(!state.swipeDrawInterval) state.swipeDrawInterval = setInterval(draw, 100);
+		if(!state.swipeDrawInterval) state.swipeDrawInterval = setInterval(draw, config.swipeIdleDrawInterval);
 		for(let i = 1; i<state.swipePoints.length; i++){
 			const sp = state.swipePoints[i-1];
 			const spProgress = (Date.now()-sp.t) / config.swipeDrawingLifeTime;
@@ -66,11 +76,8 @@ const drawSwipe = ()=>{
 	}
 }
 
-const draw = ()=>{
-
+const drawKeys = ()=>{
 	const startY = helper.calculateStartY();
-
-	ctx.clearRect(0, 0, element.width, element.height);
 
 	ctx.shadowBlur = config.keyShadow.shadowBlur;
 	ctx.shadowOffsetX = config.keyShadow.shadowOffsetX;
@@ -119,13 +126,49 @@ const draw = ()=>{
 		}
 		y += state.buttonHeight+state.margin
 	}
+}
+const drawSuggestions = ()=> {
+	if(state.suggestions.length>0){
+		const startY = helper.calculateStartY() - state.buttonHeight - state.margin*3;
 
+		const {suggestions, suggestionSize, totalWidth} = helper.getSuggestionInfo();
+
+		const startX = element.width/2 - totalWidth/2;
+		let x = startX;
+
+		suggestions.forEach(suggestion => {
+			if(suggestion.down) ctx.fillStyle = config.colors.down;
+			else if(suggestion.hover) ctx.fillStyle = config.colors.hover;
+			else ctx.fillStyle = config.colors.idle;
+			drawRoundedRectangle(x, startY, suggestionSize, state.buttonHeight, config.buttonRadius*config.resolution);
+			ctx.fillStyle = config.colors.text;
+			drawText(x, startY, suggestionSize, state.buttonHeight, suggestion.char);
+
+			x += suggestionSize+state.margin;
+		})
+	}
+}
+const drawSwipeLoader = ()=>{
+	if(state.swipeLoadingProgress < 1){
+		const swipeLoaderWidth = 120*config.resolution;
+		const swipeLoaderHeight = (config.swipeLoadingFontSize*1.5)*config.resolution;
+		const startX = element.width/2 - swipeLoaderWidth/2;
+		const startY = helper.calculateStartY() - swipeLoaderHeight - state.margin;
+		ctx.fillStyle = config.colors.idle;
+		drawRoundedRectangle(startX, startY, swipeLoaderWidth, swipeLoaderHeight, config.buttonRadius*config.resolution);
+		ctx.fillStyle = config.colors.text;
+		const fontSize = config.swipeLoadingFontSize*config.resolution;
+		drawText(startX, startY, swipeLoaderWidth, config.fontSize*config.resolution, `loading swipe ${Math.floor(state.swipeLoadingProgress*100)}%`, fontSize);
+
+	}
+}
+const drawPopup = ()=>{
 	ctx.shadowBlur = config.popupShadow.shadowBlur;
 	ctx.shadowOffsetX = config.popupShadow.shadowOffsetX;
 	ctx.shadowOffsetY = config.popupShadow.shadowOffsetY;
 
 	// draw overlay
-	if(state.activeElement && state.activeElement.extra && state.activeElement.down ){
+	if(state.activeElement && state.activeElement.extra && state.activeElement.down && !state.swipeActive){
 		const {pos} = state.activeElement;
 
 		const {startX, startY, keyArr, popupWidth, popupHeight} = helper.getPopupKeyInfo(pos, state.keyPopup ? [...state.activeElement.extra] : [state.activeElement]);
@@ -161,9 +204,21 @@ const draw = ()=>{
 			y -= state.buttonHeight;
 		}
 	}
+}
+
+const draw = ()=>{
+	ctx.clearRect(0, 0, element.width, element.height);
+
+	drawKeys();
+	if(config.swipe){
+		drawSuggestions();
+		drawSwipeLoader();
+	}
+	drawPopup();
 
 	if(config.swipe) drawSwipe();
 
+	state.stateChange = false;
 	state.textureDirty = true;
 }
 export default draw;

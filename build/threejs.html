@@ -33,7 +33,7 @@
         animate();
 
         function init() {
-            canvas = window.VRKeyboard.canvas;
+            canvas = window.VRKeyboard.getCanvas();
             window.VRKeyboard.init({
                 resolution: 2,
                 aspect: 1
@@ -224,7 +224,7 @@
             window.VRKeyboard.setMousePosFromUV(uvPos.x, uvPos.y);
 
             // detect if the keyboard texture is dirty, if so we need to update our canvas texture
-            if (window.VRKeyboard.textureDirty) {
+            if (window.VRKeyboard.getTextureDirty()) {
                 texture.needsUpdate = true;
                 window.VRKeyboard.setTextureDirty(false);
             }

@@ -1,9 +1,11 @@
 import * as helper from './helper';
 import * as events from './events'
 import * as layout from './layout'
-import draw from './drawing';
+import * as swipe from './swipe';
+import element from './dom'
 import state from './state';
 import config from './config'
+import draw from './drawing';
 
 export const checkKeyboardCollision = ()=>{
 	const {x, y} = state.mousePos;
@@ -31,12 +33,37 @@ export const checkKeyboardCollision = ()=>{
 				state.activeElement.down = state.mouseDown;
 				if(state.activeElement.down) setHoldTimeout();
 				else clearHoldTimeout();
-				draw();
+				state.stateChange = true;
 			}
 			// we found a key, return
 			return state.activeElement;
 		};
 	}
+}
+export const checkSuggestionCollision = ()=>{
+	const {x, y} = state.mousePos;
+	const startY = helper.calculateStartY() - state.buttonHeight - state.margin*3;
+	const {suggestions, suggestionSize, totalWidth} = helper.getSuggestionInfo();
+
+	let tx = element.width/2 - totalWidth/2;
+
+	for(let i = 0; i<suggestions.length; i++){
+		const suggestion = suggestions[i];
+		if(x>tx && x<tx+suggestionSize && y>startY && y<startY+state.buttonHeight){
+
+			if(!state.activeSuggestionElement || state.activeSuggestionElement !== suggestion || (state.activeSuggestionElement.down !== state.mouseDown)){
+				if(state.activeSuggestionElement === suggestion && state.activeSuggestionElement.down && !state.mouseDown) return keyPress(state.activeSuggestionElement);
+				clearActiveSuggestionElement();
+				state.activeSuggestionElement = suggestion;
+				state.activeSuggestionElement.hover = true;
+				state.activeSuggestionElement.down = state.mouseDown;
+				state.stateChange = true;
+			}
+			return state.activeSuggestionElement;
+		}
+		tx += suggestionSize+state.margin;
+	}
+
 }
 
 export const checkPopupKeyCollision = ()=>{
@@ -80,7 +107,7 @@ export const checkPopupKeyCollision = ()=>{
 		state.activePopupElement = closestKey;
 		state.activePopupElement.hover = true;
 		state.activePopupElement.down = true;
-		draw();
+		state.stateChange = true;
 	}
 
 	// inside big rectangle
@@ -103,6 +130,14 @@ export const clearActiveElement = ()=>{
 	}
 }
 
+export const clearActiveSuggestionElement = ()=>{
+	if(state.activeSuggestionElement){
+		state.activeSuggestionElement.hover = false;
+		state.activeSuggestionElement.down = false;
+		state.activeSuggestionElement = null;
+	}
+}
+
 const clearActivePopupElement = ()=>{
 	if(state.activePopupElement){
 		state.activePopupElement.hover = false;
@@ -121,24 +156,42 @@ const clearHoldTimeout = ()=>{
 const setHoldTimeout = ()=>{
 	clearHoldTimeout();
 	state.holdTimeout = setTimeout(()=>{
+		if(state.swipeActive) return;
 		state.keyPopup = true;
 		clearActivePopupElement();
 		checkPopupKeyCollision();
+		draw();
 		if(state.activeElement && state.activeElement.char === 'bksp'){
 			state.bkspInterval = setInterval(()=>{
-				if(state.activeElement) events.dispatchEvent(state.activeElement.char)
+				if(state.activeElement){
+					events.dispatchEvent(state.activeElement);
+					if(config.swipe){
+						const previousUninterruptedString = state.uninterruptedString;
+						state.uninterruptedString = state.uninterruptedString.substr(0, state.uninterruptedString.length-1);
+						if(previousUninterruptedString !== state.uninterruptedString){
+							swipe.end();
+							draw();
+						}
+					}
+				}
 			}, config.bkspIntervalTime);
 		}
 	}, config.holdPopupTime);
 }
 
-const keyPress = key =>{
+export const keyPress = key =>{
 	clearActivePopupElement();
+	clearActiveSuggestionElement();
 	clearActiveElement();
 	clearHoldTimeout();
-	let drawn = true;
 
-	events.dispatchEvent(key.char, state.shiftDown);
+	if(state.swipeActive) return;
+
+	events.dispatchEvent(key, state.shiftDown);
+
+	if(key.suggestion){
+		swipe.resetSuggestions();
+	}
 
 	switch(key.char){
 		case 'abc':
@@ -164,7 +217,8 @@ const keyPress = key =>{
 				state.permaShift = false;
 				state.shiftDownTime = Date.now();
 			}
-			drawn = false;
+			state.stateChange = true;
+
 		break;
 		case 'lang':
 			for(let i = 0; i<config.languages.length; i++){
@@ -182,11 +236,22 @@ const keyPress = key =>{
 				layout.selectLanguage(key.char.toLowerCase());
 			}else{
 				if(state.shiftDown && !state.permaShift) state.shiftDown = false;
-				drawn = false;
+				if(config.swipe){
+					if(['space', 'enter'].includes(key.char)) swipe.resetSuggestions();
+					if(key.char === 'bksp'){
+						 state.uninterruptedString = state.uninterruptedString.substr(0, state.uninterruptedString.length-1);
+					} else if(state.swipePlacedWord){
+						state.uninterruptedString = '';
+					}
+					if(state.currentLayout === state.selectedLanguage && key.char.length <= 2) state.uninterruptedString += key.char;
+				}
+
+				state.stateChange = true;
 			}
 		break;
 	}
 
-	if(!drawn) draw();
+	state.swipePlacedWord = false;
+
 	return key;
 }

@@ -37,8 +37,11 @@ const config = {
 	swipeMinimumAngleDifference:Math.PI/4, // 30 degree
 	swipeMinimumDistance:20,
 	swipeDrawingLifeTime:500,
+	swipeIdleDrawInterval:50,
 	swipeDrawingSize:6,
 	swipeMaxWordDepth:8, // depth of 8 generates ~40mb of memory, and has a max word array lengt of 136. Depth of 7 has a max word array length of 603. 8 felt optimal.
+	swipeLoadingFontSize:12,
+	suggestionCrawlStep:100,
 
 	layouts: {
 		'en':[

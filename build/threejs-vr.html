@@ -27,15 +27,16 @@
         var canvas, texture;
         var mesh;
         var raycaster = new THREE.Raycaster();
+        raycaster.far = 1.0;
         var string = "Type text..";
         var firstEdit = true;
         var textObject, font, loader;
-        var controller1, controller2, cursor;
+        var controller1, controller2, cursor, laser;
 
         init();
 
         function init() {
-            canvas = VRKeyboard.canvas;
+            canvas = VRKeyboard.getCanvas();
             VRKeyboard.init({
                 resolution: 2,
                 aspect: 1
@@ -69,8 +70,9 @@
             texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
             texture.minFilter = THREE.LinearFilter;
 
-            var geometry = new THREE.PlaneBufferGeometry(100, 100, 32);
-            var material = new THREE.MeshBasicMaterial({map:texture, transparent:true});
+            var geometry = new THREE.PlaneBufferGeometry(1, 1, 32);
+            var material = new THREE.MeshBasicMaterial({map:texture, transparent:true, side:THREE.DoubleSide});
+            material.alphaTest = 0.5;
 
             mesh = new THREE.Mesh(geometry, material);
             scene.add(mesh);
@@ -104,27 +106,38 @@
             scene.add( controller2 );
             scene.add( controller1 );
 
-
             controller1.addEventListener('selectstart', selectDown);
             controller1.addEventListener('selectend', selectUp);
 
+            // we create a texture on a canvas for our laser pointer
+            var laserTextureCanvas = document.createElement('canvas');
+            laserTextureCanvas.width = laserTextureCanvas.height = 32;
+            var laserTextureCtx = laserTextureCanvas.getContext('2d');
+            var gradient = laserTextureCtx.createLinearGradient(0, 0, 0, 32);
+            gradient.addColorStop(0.3, 'rgba(255, 255, 255, 1)');
+            gradient.addColorStop(0.9, 'rgba(255, 255, 255, 0)');
+            laserTextureCtx.fillStyle = gradient;
+            laserTextureCtx.fillRect(0, 0, 32, 32);
+            var laserCanvasTexture = new THREE.CanvasTexture(laserTextureCanvas);
+            var laserMaterial = new THREE.MeshBasicMaterial({color:0xFFFFFF, map:laserCanvasTexture, transparent: true, side:THREE.DoubleSide});
+            var g = new THREE.PlaneGeometry( 0.02, 1, 32 );
+            // we rotate the geometry to point forward and translate it so that it doesnt scale from the center
+            g.rotateX(Math.PI/2);
+            g.translate(0, 0, -0.5);
+            laser = new THREE.Mesh( g, laserMaterial );
+
             // add laser pointer to right controller
-            var laserMaterial = new THREE.LineBasicMaterial({color:0xFFFFFF, transparent: false});
-            var g = new THREE.Geometry();
-            g.vertices.push( new THREE.Vector3(0,0,-2.5) );
-            g.vertices.push( new THREE.Vector3(0,0,0) );
-            controller1.add(new THREE.Line( g, laserMaterial ));
+            controller1.add(laser);
 
             // add a cursor to the right controller
             var pointerMaterial = new THREE.MeshBasicMaterial({color: 0xFFFFFF, transparent: false});
-            var geometry = new THREE.CircleGeometry(0.005, 12);
+            var geometry = new THREE.CircleGeometry(0.008, 12);
             cursor = new THREE.Mesh(geometry, pointerMaterial);
             scene.add(cursor);
 
             // add keyboard to left controller
             controller2.add(mesh);
             mesh.position.z = -.3;
-            mesh.scale.setScalar(0.01);
 
         }
 
@@ -198,7 +211,7 @@
                 textObject.rotation.x = Math.cos(time / hz) * ampl;
                 textObject.rotation.y = Math.sin(time / hz) * ampl;
             }
-
+            var laserLength = 1.0;
             if(controller1){
                 // point raycastDestination to controller forward
                 raycastDestination.set(0, 0, -1);
@@ -213,41 +226,46 @@
                 // default the uvPos to 0,0 to ensure no buttons being highlighted when there is no intersection
                 var uvPos = new THREE.Vector2();
                 cursor.visible = false;
-                for (var i = 0; i < intersects.length; i++) {
 
-                    // if we intersect our plane, grab the uv from the material
-                    var intersect = intersects[0];
+                var intersect = intersects[0];
+
+                if(intersect){
                     var material = intersect.object.material;
-                    var uvPos = material.map.transformUv(intersect.uv);
-                    VRKeyboard.setMousePosFromUV(uvPos.x, uvPos.y);
+                    uvPos = material.map.transformUv(intersect.uv);
+                }
 
+                VRKeyboard.setMousePosFromUV(uvPos.x, uvPos.y);
+
+                if(intersect && intersect.face && VRKeyboard.getActiveElement()){
                     // position the cursor a little bit in front of the mesg
                     raycastDestination.set(0, 0, -1);
                     raycastDestination.applyQuaternion(quat);
                     raycastDestination.multiplyScalar(intersect.distance-0.001);
                     raycastDestination.add(controller1.position);
 
-                    if(VRKeyboard.activeElement && intersect.face){
-                        // rotate the cursor to the surface normal
-                        const n = intersect.face.normal.clone();
-                        n.transformDirection( intersect.object.matrixWorld );
-                        n.multiplyScalar( 10 );
-                        n.add( intersect.point );
+                    // rotate the cursor to the surface normal
+                    laserLength = intersect.distance;
 
-                        cursor.visible = true;
-                        cursor.position.copy(raycastDestination);
-                        cursor.lookAt(n);
-                    }
+                    const n = intersect.face.normal.clone();
+                    n.transformDirection( intersect.object.matrixWorld );
+                    n.multiplyScalar( 10 );
+                    n.add( intersect.point );
+
+                    cursor.visible = true;
+                    cursor.position.copy(raycastDestination);
+                    cursor.lookAt(n);
+                }
+
+                if(laser){
+                    laser.scale.z = laserLength;
                 }
 
                 // detect if the keyboard texture is dirty, if so we need to update our canvas texture
-                if (VRKeyboard.textureDirty) {
+                if (VRKeyboard.getTextureDirty()) {
                     texture.needsUpdate = true;
                     VRKeyboard.setTextureDirty(false);
                 }
             }
-
-
         }
     </script>
 </body>

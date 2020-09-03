@@ -1,8 +1,9 @@
-import * as helper from './helper.js';
+import * as helper from './helper'
+import * as swipe from './swipe'
 import config from './config'
 import element from './dom'
 import state from './state'
-import draw from './drawing';
+import draw from './drawing'
 
 export const init = ()=>{
 	config.languages.forEach(langName=>{
@@ -13,10 +14,13 @@ export const init = ()=>{
 		});
 })
 }
+
 export const selectLanguage = lang =>{
 	if(config.layouts[lang]){
 		state.selectedLanguage = lang;
 		setLayout(lang)
+
+		if(config.swipe) swipe.load();
 	}
 }
 
@@ -27,6 +31,8 @@ export const setLayout = name =>{
 	state.widthUnits = helper.calculateWidthUnits()
 	const totalMargin = (state.widthUnits+1)*state.margin;
 	state.buttonSize = (element.width - totalMargin) / state.widthUnits;
+	state.uninterruptedString = '';
+	state.stateChange = false;
 	draw();
 }
 

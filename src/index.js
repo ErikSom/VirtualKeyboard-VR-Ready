@@ -24,12 +24,18 @@ export const setScreenSizeFromAspectRatio = layout.setScreenSizeFromAspectRatio;
 
 export const setMouseDown = (bool, x, y)=>{
 	state.mouseDown = bool;
+
 	if(x !== undefined) setMousePos(x, y);
 	else setMousePos(state.mousePos.x, state.mousePos.y);
 
-	if(!state.mouseDown){
-		swipe.end();
-		console.log('Suggestions:',state.suggestions);
+	if(!state.mouseDown && state.swipeActive){
+		if(state.suggestions.length>0){
+			const suggestionKey = state.suggestions.shift();
+			events.dispatchEvent(suggestionKey, state.shiftDown);
+			state.uninterruptedString = suggestionKey.char;
+			state.swipePlacedWord = true;
+		}
+		state.swipeActive = false;
 	}
 }
 
@@ -43,16 +49,24 @@ export const setMousePos = (x, y)=>{
 
 	let foundKey;
 	if(state.keyPopup) foundKey = collision.checkPopupKeyCollision();
+	if(!foundKey && config.swipe) foundKey = collision.checkSuggestionCollision();
 	if(!foundKey) foundKey = collision.checkKeyboardCollision();
 
-	if(state.mouseDown){
-		swipe.move();
+	if(config.swipe && state.mouseDown && !state.keyPopup) swipe.move();
+
+	if(!foundKey && (state.activeElement || state.activeSuggestionElement)){
+		collision.clearActiveElement();
+		collision.clearActiveSuggestionElement();
+		state.stateChange = true;
+	}
+	if(config.swipe && !state.mouseDown && state.previousMouseState){
+		// a bit dirty but we need the keypress info, and we dont want to draw 2 times.
+		if(!state.keyPopup) swipe.end();
+		state.stateChange = true;
 	}
 
-	if(!foundKey && state.activeElement){
-		collision.clearActiveElement();
-		draw();
-	}
+	state.previousMouseState = state.mouseDown;
+	if(state.stateChange) draw();
 }
 
 export const addListeners = ()=>{
@@ -91,15 +105,14 @@ export const setTextureDirty = bool => {state.textureDirty = bool};
 
 export const getTextureDirty = ()=>state.textureDirty;
 
+export const resetSuggestionInput = swipe.resetSuggestions;
+
 export const init = _config =>{
 
 	Object.assign(config, _config);
 	layout.init();
 	layout.setScreenSizeFromAspectRatio();
 	layout.selectLanguage(config.language);
-	
-	swipe.load().then(()=>{
-	});
 
 	loadSVGs().then(()=>{
 		draw();

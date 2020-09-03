@@ -70,6 +70,12 @@ export const getPopupKeyInfo = (pos, keys) => {
 		startY
 	};
 }
+export const getSuggestionInfo = ()=>{
+	const suggestions = state.suggestions.slice(0, 3);
+	const suggestionSize = state.buttonSize*3;
+	const totalWidth = suggestions.length*(suggestionSize+state.margin)-state.margin;
+	return {suggestions, suggestionSize, totalWidth};
+}
 export const getDistance = (a, b) => {
 	const dx = a.x - b.x;
 	const dy = a.y - b.y;

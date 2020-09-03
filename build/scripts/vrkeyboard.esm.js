@@ -36,8 +36,13 @@ const config = {
   swipeMinimumAngleDifference: Math.PI / 4,
   // 30 degree
   swipeMinimumDistance: 20,
+  swipeDrawingLifeTime: 500,
+  swipeIdleDrawInterval: 50,
+  swipeDrawingSize: 6,
   swipeMaxWordDepth: 8,
   // depth of 8 generates ~40mb of memory, and has a max word array lengt of 136. Depth of 7 has a max word array length of 603. 8 felt optimal.
+  swipeLoadingFontSize: 12,
+  suggestionCrawlStep: 100,
   layouts: {
     'en': [[{
       char: 'q',
@@ -1310,7 +1315,9 @@ const state = {
   canvas: document.createElement('canvas'),
   activeElement: null,
   activePopupElement: null,
+  activeSuggestionElement: null,
   mouseDown: false,
+  previousMouseState: false,
   mousePos: {
     x: 0,
     y: 0
@@ -1331,7 +1338,12 @@ const state = {
   bkspInterval: null,
   swipeActive: false,
   swipePoints: [],
-  suggestions: []
+  swipeDrawInterval: null,
+  swipePlacedWord: false,
+  swipeLoadingProgress: 0,
+  suggestions: [],
+  uninterruptedString: '',
+  stateChange: false
 };
 
 const element = document.createElement('canvas');
@@ -1402,6 +1414,16 @@ const getPopupKeyInfo = (pos, keys) => {
     startY
   };
 };
+const getSuggestionInfo = () => {
+  const suggestions = state.suggestions.slice(0, 3);
+  const suggestionSize = state.buttonSize * 3;
+  const totalWidth = suggestions.length * (suggestionSize + state.margin) - state.margin;
+  return {
+    suggestions,
+    suggestionSize,
+    totalWidth
+  };
+};
 const getDistance = (a, b) => {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
@@ -1412,6 +1434,135 @@ const getAngle = (a, b) => {
   const dy = a.y - b.y;
   return Math.atan2(dy, dx);
 };
+const uniqueCharacters = str => {
+  let unique = "";
+
+  for (let x = 0; x < str.length; x++) {
+    if (unique.indexOf(str.charAt(x)) === -1) {
+      unique += str[x];
+    }
+  }
+
+  return unique;
+};
+
+function _defineProperty(obj, key, value) {
+  if (key in obj) {
+    Object.defineProperty(obj, key, {
+      value: value,
+      enumerable: true,
+      configurable: true,
+      writable: true
+    });
+  } else {
+    obj[key] = value;
+  }
+
+  return obj;
+}
+
+function ownKeys(object, enumerableOnly) {
+  var keys = Object.keys(object);
+
+  if (Object.getOwnPropertySymbols) {
+    var symbols = Object.getOwnPropertySymbols(object);
+    if (enumerableOnly) symbols = symbols.filter(function (sym) {
+      return Object.getOwnPropertyDescriptor(object, sym).enumerable;
+    });
+    keys.push.apply(keys, symbols);
+  }
+
+  return keys;
+}
+
+function _objectSpread2(target) {
+  for (var i = 1; i < arguments.length; i++) {
+    var source = arguments[i] != null ? arguments[i] : {};
+
+    if (i % 2) {
+      ownKeys(Object(source), true).forEach(function (key) {
+        _defineProperty(target, key, source[key]);
+      });
+    } else if (Object.getOwnPropertyDescriptors) {
+      Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
+    } else {
+      ownKeys(Object(source)).forEach(function (key) {
+        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
+      });
+    }
+  }
+
+  return target;
+}
+
+var src = {
+	compareTwoStrings,
+	findBestMatch
+};
+
+function compareTwoStrings(first, second) {
+	first = first.replace(/\s+/g, '');
+	second = second.replace(/\s+/g, '');
+
+	if (!first.length && !second.length) return 1;                   // if both are empty strings
+	if (!first.length || !second.length) return 0;                   // if only one is empty string
+	if (first === second) return 1;       							 // identical
+	if (first.length === 1 && second.length === 1) return 0;         // both are 1-letter strings
+	if (first.length < 2 || second.length < 2) return 0;			 // if either is a 1-letter string
+
+	let firstBigrams = new Map();
+	for (let i = 0; i < first.length - 1; i++) {
+		const bigram = first.substring(i, i + 2);
+		const count = firstBigrams.has(bigram)
+			? firstBigrams.get(bigram) + 1
+			: 1;
+
+		firstBigrams.set(bigram, count);
+	}
+	let intersectionSize = 0;
+	for (let i = 0; i < second.length - 1; i++) {
+		const bigram = second.substring(i, i + 2);
+		const count = firstBigrams.has(bigram)
+			? firstBigrams.get(bigram)
+			: 0;
+
+		if (count > 0) {
+			firstBigrams.set(bigram, count - 1);
+			intersectionSize++;
+		}
+	}
+
+	return (2.0 * intersectionSize) / (first.length + second.length - 2);
+}
+
+function findBestMatch(mainString, targetStrings) {
+	if (!areArgsValid(mainString, targetStrings)) throw new Error('Bad arguments: First argument should be a string, second should be an array of strings');
+	
+	const ratings = [];
+	let bestMatchIndex = 0;
+
+	for (let i = 0; i < targetStrings.length; i++) {
+		const currentTargetString = targetStrings[i];
+		const currentRating = compareTwoStrings(mainString, currentTargetString);
+		ratings.push({target: currentTargetString, rating: currentRating});
+		if (currentRating > ratings[bestMatchIndex].rating) {
+			bestMatchIndex = i;
+		}
+	}
+	
+	
+	const bestMatch = ratings[bestMatchIndex];
+	
+	return { ratings, bestMatch, bestMatchIndex };
+}
+
+function areArgsValid(mainString, targetStrings) {
+	if (typeof mainString !== 'string') return false;
+	if (!Array.isArray(targetStrings)) return false;
+	if (!targetStrings.length) return false;
+	if (targetStrings.find(s => typeof s !== 'string')) return false;
+	return true;
+}
 
 const ctx = element.getContext('2d');
 
@@ -1433,15 +1584,70 @@ const drawText = (x, y, w, h, text, fontSize) => {
   ctx.font = "".concat(fontSize, "px ").concat(config.font);
   ctx.textBaseline = 'middle';
   if (!text) return;
+
+  if (text.length > 2) {
+    let metrics = ctx.measureText(text);
+
+    while (fontSize > 4 && metrics.width > w - state.margin * 2) {
+      fontSize--;
+      ctx.font = "".concat(fontSize, "px ").concat(config.font);
+      metrics = ctx.measureText(text);
+    }
+  }
+
   const textSize = ctx.measureText(text);
   const textX = (w - textSize.width) / 2;
   const textY = h / 2;
   ctx.fillText(text, x + textX, y + textY);
 };
 
-const draw = () => {
+const drawCircleLine = (sx, sy, sr, ex, ey, er, a) => {
+  const angle = getAngle({
+    x: ex,
+    y: ey
+  }, {
+    x: sx,
+    y: sy
+  }) + Math.PI / 2;
+  ctx.fillStyle = config.colors.down;
+  const path = new Path2D();
+  path.arc(sx, sy, sr, angle, angle + Math.PI);
+  path.arc(ex, ey, er, angle + Math.PI, angle);
+  path.closePath();
+  ctx.beginPath();
+  ctx.fill(path);
+  ctx.closePath();
+  return ctx;
+};
+
+const drawSwipe = () => {
+  if (state.swipePoints.length > 1) {
+    if (!state.swipeDrawInterval) state.swipeDrawInterval = setInterval(draw, config.swipeIdleDrawInterval);
+
+    for (let i = 1; i < state.swipePoints.length; i++) {
+      const sp = state.swipePoints[i - 1];
+      const spProgress = (Date.now() - sp.t) / config.swipeDrawingLifeTime;
+      const sr = config.swipeDrawingSize * (1 - spProgress);
+      const ep = state.swipePoints[i];
+      const epProgress = (Date.now() - ep.t) / config.swipeDrawingLifeTime;
+      const er = config.swipeDrawingSize * (1 - epProgress);
+
+      if (spProgress >= 1) {
+        state.swipePoints.splice(i - 1, 1);
+        i--;
+        continue;
+      }
+
+      drawCircleLine(sp.x, sp.y, sr, ep.x, ep.y, er);
+    }
+  } else if (state.swipeDrawInterval) {
+    clearInterval(state.swipeDrawInterval);
+    state.swipeDrawInterval = null;
+  }
+};
+
+const drawKeys = () => {
   const startY = calculateStartY();
-  ctx.clearRect(0, 0, element.width, element.height);
   ctx.shadowBlur = config.keyShadow.shadowBlur;
   ctx.shadowOffsetX = config.keyShadow.shadowOffsetX;
   ctx.shadowOffsetY = config.keyShadow.shadowOffsetY;
@@ -1488,12 +1694,48 @@ const draw = () => {
 
     y += state.buttonHeight + state.margin;
   }
+};
 
+const drawSuggestions = () => {
+  if (state.suggestions.length > 0) {
+    const startY = calculateStartY() - state.buttonHeight - state.margin * 3;
+    const {
+      suggestions,
+      suggestionSize,
+      totalWidth
+    } = getSuggestionInfo();
+    const startX = element.width / 2 - totalWidth / 2;
+    let x = startX;
+    suggestions.forEach(suggestion => {
+      if (suggestion.down) ctx.fillStyle = config.colors.down;else if (suggestion.hover) ctx.fillStyle = config.colors.hover;else ctx.fillStyle = config.colors.idle;
+      drawRoundedRectangle(x, startY, suggestionSize, state.buttonHeight, config.buttonRadius * config.resolution);
+      ctx.fillStyle = config.colors.text;
+      drawText(x, startY, suggestionSize, state.buttonHeight, suggestion.char);
+      x += suggestionSize + state.margin;
+    });
+  }
+};
+
+const drawSwipeLoader = () => {
+  if (state.swipeLoadingProgress < 1) {
+    const swipeLoaderWidth = 120 * config.resolution;
+    const swipeLoaderHeight = config.swipeLoadingFontSize * 1.5 * config.resolution;
+    const startX = element.width / 2 - swipeLoaderWidth / 2;
+    const startY = calculateStartY() - swipeLoaderHeight - state.margin;
+    ctx.fillStyle = config.colors.idle;
+    drawRoundedRectangle(startX, startY, swipeLoaderWidth, swipeLoaderHeight, config.buttonRadius * config.resolution);
+    ctx.fillStyle = config.colors.text;
+    const fontSize = config.swipeLoadingFontSize * config.resolution;
+    drawText(startX, startY, swipeLoaderWidth, config.fontSize * config.resolution, "loading swipe ".concat(Math.floor(state.swipeLoadingProgress * 100), "%"), fontSize);
+  }
+};
+
+const drawPopup = () => {
   ctx.shadowBlur = config.popupShadow.shadowBlur;
   ctx.shadowOffsetX = config.popupShadow.shadowOffsetX;
   ctx.shadowOffsetY = config.popupShadow.shadowOffsetY; // draw overlay
 
-  if (state.activeElement && state.activeElement.extra && state.activeElement.down) {
+  if (state.activeElement && state.activeElement.extra && state.activeElement.down && !state.swipeActive) {
     const {
       pos
     } = state.activeElement;
@@ -1533,8 +1775,350 @@ const draw = () => {
       y -= state.buttonHeight;
     }
   }
+};
 
+const draw = () => {
+  ctx.clearRect(0, 0, element.width, element.height);
+  drawKeys();
+
+  if (config.swipe) {
+    drawSuggestions();
+    drawSwipeLoader();
+  }
+
+  drawPopup();
+  if (config.swipe) drawSwipe();
+  state.stateChange = false;
   state.textureDirty = true;
+};
+
+const map = {};
+let initialized = false;
+let charArray = [];
+let activeBranches = [];
+let currentBranch = []; // to do branch currentBranch
+
+let wordsFound = [];
+let startPosition = null;
+let refPosition = null;
+let refAngle = null;
+let lastBranchedChar = null;
+let crawlProgress = 0;
+let crawlTimeout = null;
+let currentXHR = null;
+const load = () => {
+  initialized = false;
+
+  if (map[state.selectedLanguage] !== undefined) {
+    return loadingFinished();
+  }
+
+  state.swipeLoadingProgress = 0;
+  const worldListFolder = './wordlist/';
+  if (currentXHR) currentXHR.abort();
+  currentXHR = new XMLHttpRequest();
+  currentXHR.open('GET', "".concat(worldListFolder).concat(state.selectedLanguage, '.txt'), true);
+  currentXHR.responseType = 'text';
+
+  currentXHR.onload = function () {
+    if (currentXHR.readyState === currentXHR.DONE) {
+      if (currentXHR.status === 200) {
+        map[state.selectedLanguage] = {};
+        mapText(currentXHR.responseText);
+        loadingFinished();
+      }
+    }
+  };
+
+  currentXHR.onprogress = function (event) {
+    state.swipeLoadingProgress = event.loaded / event.total;
+    draw();
+  };
+
+  reset();
+  currentXHR.send(null);
+};
+
+const loadingFinished = () => {
+  state.swipeLoadingProgress = 1.0;
+  initialized = true;
+  draw();
+};
+
+const mapText = data => {
+  buildSpecialCharacterMap();
+  const words = data.toString().split("\n");
+
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i].replace('\r', '');
+    if (word.length === 1) continue;
+    let targetObject = null;
+    let previousChar = null;
+    const targetLength = Math.min(word.length, config.swipeMaxWordDepth);
+
+    for (let j = 0; j < targetLength; j++) {
+      const char = getCorrectChar(word.charAt(j));
+
+      if (char !== previousChar) {
+        if (targetObject === null) {
+          if (map[state.selectedLanguage][char] === undefined) map[state.selectedLanguage][char] = {};
+          targetObject = map[state.selectedLanguage][char];
+        } else {
+          if (targetObject[char] === undefined) targetObject[char] = {};
+          targetObject = targetObject[char];
+        }
+      }
+
+      if (j === 0) {
+        if (targetObject.allWords === undefined) targetObject.allWords = [];
+        targetObject.allWords.push(word);
+      }
+
+      if (j === targetLength - 1) {
+        if (targetObject.words === undefined) targetObject.words = [];
+        targetObject.words.push(word);
+      }
+
+      previousChar = char;
+    }
+  }
+};
+
+const buildSpecialCharacterMap = () => {
+  map[state.selectedLanguage].specialCharacterMap = {};
+  const {
+    specialCharacterMap
+  } = map[state.selectedLanguage];
+  state.layout.forEach(row => {
+    row.forEach(key => {
+      if (key.char.length <= 2 && key.extra) {
+        key.extra.forEach(extraKey => {
+          specialCharacterMap[extraKey.char] = key.char;
+        });
+      }
+    });
+  });
+};
+
+const move = () => {
+  if (!initialized) return;
+  if (!startPosition) startPosition = _objectSpread2({}, state.mousePos);
+  const startPosDifference = getDistance(state.mousePos, startPosition);
+
+  if (startPosDifference > config.swipeMinimumDistance * config.resolution) {
+    state.swipeActive = true;
+  }
+
+  pushSwipePoint();
+  if (state.activeElement) processAngle();
+  pushChar();
+};
+const end = () => {
+  if (!initialized) return;
+  pushChar();
+
+  if (state.swipeActive) {
+    getSwipeSuggestions();
+    state.uninterruptedString = '';
+  } else getSuggestions(state.uninterruptedString);
+
+  reset();
+};
+
+const getCorrectChar = char => {
+  let correctChar = map[state.selectedLanguage].specialCharacterMap[char];
+
+  if (correctChar !== undefined) {
+    return correctChar;
+  }
+
+  return char;
+};
+
+const pushChar = () => {
+  const key = state.activeElement;
+  if (!key) return;
+  const char = getCorrectChar(key.char);
+  if (charArray[charArray.length - 1] === char || char.length > 2) return;
+  charArray.push(char);
+  resetAngleFinder();
+  processChar(char);
+};
+
+const processChar = char => {
+  if (activeBranches.length === 0) {
+    const path = map[state.selectedLanguage][char];
+    processPath(path);
+  } else {
+    currentBranch = [];
+    activeBranches.forEach(branch => {
+      if (branch) {
+        // just to be sure
+        const path = branch[char];
+        processPath(path);
+      }
+    });
+  }
+};
+
+const processPath = path => {
+  if (!path) return;
+  const keys = Object.keys(path).filter(key => key !== 'words');
+
+  if (keys.length > 0) {
+    activeBranches.push(path);
+    currentBranch.push(path);
+  }
+
+  addWords(path);
+};
+
+const addWords = path => {
+  const {
+    words
+  } = path;
+  if (words) wordsFound = wordsFound.concat(words);
+};
+
+const processAngle = () => {
+  if (!refPosition) {
+    refPosition = _objectSpread2({}, state.mousePos);
+    return;
+  }
+
+  let activeChar = charArray[charArray.length - 1];
+  if (lastBranchedChar === activeChar) return;
+  const l = getDistance(state.mousePos, refPosition);
+
+  if (l >= config.swipeMinimumVectorLength) {
+    let a = getAngle(state.mousePos, refPosition);
+
+    if (refAngle) {
+      // angle difference
+      const ad = getAngleDifference(a, refAngle);
+
+      if (Math.abs(ad) > config.swipeMinimumAngleDifference) {
+        // reset branch
+        activeBranches = [...currentBranch];
+        currentBranch = [];
+        lastBranchedChar = activeChar;
+      }
+    }
+
+    refAngle = a;
+    refPosition = _objectSpread2({}, state.mousePos);
+  }
+};
+
+const getAngleDifference = (a, b) => {
+  return Math.atan2(Math.sin(a - b), Math.cos(a - b));
+};
+
+const getSwipeSuggestions = () => {
+  const lastChar = charArray[charArray.length - 1]; // filter for words that match the last letter pressed
+
+  let suggestions = wordsFound.filter(word => {
+    const lastCharInWord = getCorrectChar(word.charAt(word.length - 1));
+    return lastCharInWord === lastChar;
+  }); // sort by unique characters
+
+  suggestions.sort(function (a, b) {
+    return uniqueCharacters(b).length - uniqueCharacters(a).length;
+  }); // deduplicate
+
+  suggestions = suggestions.filter((v, i, a) => a.indexOf(v) === i);
+  setSuggestions(suggestions);
+};
+
+const getSuggestions = (str, started = false, previousBatch = []) => {
+  if (!started) resetCrawl();
+
+  if (str === '') {
+    state.suggestions = [];
+    return;
+  }
+
+  const firstChar = getCorrectChar(str.charAt(0));
+  const firstCharList = map[state.selectedLanguage][firstChar];
+
+  if (!firstCharList || !firstCharList.allWords) {
+    state.suggestions = [];
+    return;
+  }
+
+  const wordList = firstCharList.allWords;
+  const slicedWordList = wordList.slice(crawlProgress, crawlProgress + config.suggestionCrawlStep);
+  let batch;
+
+  if (wordList) {
+    batch = src.findBestMatch(str, slicedWordList).ratings;
+    batch.sort((a, b) => b.rating - a.rating);
+    batch = batch.slice(0, 4).filter(s => s.target !== str); // we take 1 extra because it could include str
+    // mix in the previous batch
+
+    batch = batch.concat(previousBatch);
+    batch.sort((a, b) => b.rating - a.rating);
+    batch = batch.slice(0, 3);
+  }
+
+  crawlProgress += config.suggestionCrawlStep;
+
+  if (crawlProgress < wordList.length) {
+    // prevent blocking the javascript thread
+    crawlTimeout = setTimeout(() => {
+      getSuggestions(str, true, batch);
+    }, 0);
+  } else {
+    setSuggestions(batch.map(s => s.target));
+    draw();
+  }
+};
+
+const setSuggestions = suggestions => {
+  state.suggestions = suggestions.map(suggestion => ({
+    char: suggestion,
+    suggestion: true
+  }));
+};
+
+const resetSuggestions = () => {
+  state.suggestions = [];
+  state.uninterruptedString = '';
+};
+
+const resetAngleFinder = () => {
+  refPosition = null;
+  refAngle = null;
+  lastBranchedChar = null;
+};
+
+const resetCrawl = () => {
+  crawlProgress = 0;
+  clearTimeout(crawlTimeout);
+  crawlTimeout = null;
+};
+
+const pushSwipePoint = () => {
+  if (!state.swipeActive) return;
+  const lastSwipePoint = state.swipePoints[state.swipePoints.length - 1];
+
+  if (lastSwipePoint) {
+    const nextPointDiff = getDistance(lastSwipePoint, state.mousePos);
+    if (nextPointDiff < config.swipeMinimumVectorLength) return;
+  }
+
+  state.swipePoints.push(_objectSpread2(_objectSpread2({}, state.mousePos), {}, {
+    t: Date.now()
+  }));
+};
+
+const reset = () => {
+  charArray = [];
+  activeBranches = [];
+  currentBranch = [];
+  wordsFound = [];
+  startPosition = null;
+  resetAngleFinder();
 };
 
 const init = () => {
@@ -1552,6 +2136,7 @@ const selectLanguage = lang => {
   if (config.layouts[lang]) {
     state.selectedLanguage = lang;
     setLayout(lang);
+    if (config.swipe) load();
   }
 };
 const setLayout = name => {
@@ -1560,6 +2145,8 @@ const setLayout = name => {
   state.widthUnits = calculateWidthUnits();
   const totalMargin = (state.widthUnits + 1) * state.margin;
   state.buttonSize = (element.width - totalMargin) / state.widthUnits;
+  state.uninterruptedString = '';
+  state.stateChange = false;
   draw();
 };
 const setScreenSizeInPixels = (width, height, devicePixelRatio) => {
@@ -1636,7 +2223,6 @@ Object.assign(EventDispatcher.prototype, {
 
 const dispatcher = new EventDispatcher();
 const addEventListener = (type, listener) => {
-  console.log("Add event listener");
   dispatcher.addEventListener(type, listener);
 };
 const removeEventListener = (type, listener) => {
@@ -1644,11 +2230,32 @@ const removeEventListener = (type, listener) => {
 };
 const dispatchEvent = (key, shiftDown) => {
   let char = null;
-  if (key.length <= 2 && !config.languages.includes(key.toLowerCase())) char = shiftDown ? key.toUpperCase() : key;
-  if (key === 'space') char = ' ';
+  let keyName = key.char;
+  if (key.char.length <= 2 && !config.languages.includes(key.char.toLowerCase())) char = shiftDown ? key.char.toUpperCase() : key.char;
+  let removeChars = false;
+
+  if (key.suggestion) {
+    char = key.char + ' ';
+    keyName = 'suggestion';
+    if (state.swipePlacedWord && state.uninterruptedString.length) state.uninterruptedString += ' ';
+    if (state.uninterruptedString.length) removeChars = true;
+  }
+
+  if (state.swipePlacedWord && key.char == 'bksp') removeChars = true;
+  var length = state.uninterruptedString.length;
+
+  if (removeChars) {
+    state.uninterruptedString = '';
+
+    for (let i = 0; i < length; i++) dispatchEvent({
+      char: 'bksp'
+    });
+  }
+
+  if (key.char === 'space') char = ' ';
   dispatcher.dispatchEvent({
     type: KEYDOWN,
-    key,
+    key: keyName,
     char
   });
 };
@@ -1662,253 +2269,6 @@ var events = /*#__PURE__*/Object.freeze({
 	dispatchEvent: dispatchEvent,
 	KEYDOWN: KEYDOWN
 });
-
-function _defineProperty(obj, key, value) {
-  if (key in obj) {
-    Object.defineProperty(obj, key, {
-      value: value,
-      enumerable: true,
-      configurable: true,
-      writable: true
-    });
-  } else {
-    obj[key] = value;
-  }
-
-  return obj;
-}
-
-function ownKeys(object, enumerableOnly) {
-  var keys = Object.keys(object);
-
-  if (Object.getOwnPropertySymbols) {
-    var symbols = Object.getOwnPropertySymbols(object);
-    if (enumerableOnly) symbols = symbols.filter(function (sym) {
-      return Object.getOwnPropertyDescriptor(object, sym).enumerable;
-    });
-    keys.push.apply(keys, symbols);
-  }
-
-  return keys;
-}
-
-function _objectSpread2(target) {
-  for (var i = 1; i < arguments.length; i++) {
-    var source = arguments[i] != null ? arguments[i] : {};
-
-    if (i % 2) {
-      ownKeys(Object(source), true).forEach(function (key) {
-        _defineProperty(target, key, source[key]);
-      });
-    } else if (Object.getOwnPropertyDescriptors) {
-      Object.defineProperties(target, Object.getOwnPropertyDescriptors(source));
-    } else {
-      ownKeys(Object(source)).forEach(function (key) {
-        Object.defineProperty(target, key, Object.getOwnPropertyDescriptor(source, key));
-      });
-    }
-  }
-
-  return target;
-}
-
-const map = {};
-let initialized = false;
-let charArray = [];
-let activeBranches = [];
-let currentBranch = []; // to do branch currentBranch
-
-let wordsFound = [];
-let startPosition = null;
-let refPosition = null;
-let refAngle = null;
-let lastBranchedChar = null;
-const load = () => {
-  initialized = false;
-  return new Promise((resolve, reject) => {
-    if (map[config.language]) return resolve();
-    map[config.language] = {};
-    const worldListFolder = './wordlist/';
-    fetch("".concat(worldListFolder).concat(config.language, '.txt')).then(response => response.text()).then(data => {
-      mapText(data);
-      initialized = true;
-      resolve();
-    }).catch(err => {
-      reject(err);
-    });
-  });
-};
-
-const mapText = data => {
-  const words = data.toString().split("\n");
-
-  for (let i = 0; i < words.length; i++) {
-    const word = words[i].replace('\r', '');
-    let targetObject = null;
-    let previousChar = null;
-    const targetLength = Math.min(word.length, config.swipeMaxWordDepth);
-
-    for (let j = 0; j < targetLength; j++) {
-      const char = word.charAt(j);
-
-      if (char !== previousChar) {
-        if (targetObject === null) {
-          if (map[config.language][char] === undefined) map[config.language][char] = {};
-          targetObject = map[config.language][char];
-        } else {
-          if (targetObject[char] === undefined) targetObject[char] = {};
-          targetObject = targetObject[char];
-        }
-      }
-
-      previousChar = char;
-
-      if (j === targetLength - 1) {
-        if (targetObject.words === undefined) targetObject.words = [];
-        targetObject.words.push(word);
-      }
-    }
-  }
-};
-
-const move = () => {
-  if (!initialized) return;
-  if (!startPosition) startPosition = _objectSpread2({}, state.mousePos);
-  const startPosDifference = getDistance(state.mousePos, startPosition);
-
-  if (startPosDifference > config.swipeMinimumDistance * config.resolution) {
-    state.swipeActive = true;
-  }
-
-  pushSwipePoint();
-  if (state.activeElement) processAngle();
-  pushChar();
-};
-const end = () => {
-  if (!initialized) return;
-  pushChar();
-  if (state.swipeActive) getSuggestions();
-  reset();
-};
-
-const pushChar = () => {
-  const key = state.activeElement;
-  if (!key || charArray[charArray.length - 1] === key.char || key.char.length > 2) return;
-  charArray.push(key.char);
-  resetAngleFinder();
-  processChar(key.char);
-};
-
-const processChar = char => {
-  if (activeBranches.length === 0) {
-    const path = map[config.language][char];
-    processPath(path);
-  } else {
-    currentBranch = [];
-    activeBranches.forEach(branch => {
-      if (branch) {
-        // just to be sure
-        const path = branch[char];
-        processPath(path);
-      }
-    });
-  }
-};
-
-const processPath = path => {
-  if (!path) return;
-  const keys = Object.keys(path).filter(key => key !== 'words');
-
-  if (keys.length > 0) {
-    activeBranches.push(path);
-    currentBranch.push(path);
-  }
-
-  addWords(path);
-};
-
-const addWords = path => {
-  const {
-    words
-  } = path;
-  if (words) wordsFound = wordsFound.concat(words);
-};
-
-const processAngle = () => {
-  if (!refPosition) {
-    refPosition = _objectSpread2({}, state.mousePos);
-    return;
-  }
-
-  let activeChar = charArray[charArray.length - 1];
-  if (lastBranchedChar === activeChar) return;
-  const l = getDistance(state.mousePos, refPosition);
-
-  if (l >= config.swipeMinimumVectorLength) {
-    let a = getAngle(state.mousePos, refPosition);
-
-    if (refAngle) {
-      // angle difference
-      const ad = getAngleDifference(a, refAngle);
-
-      if (Math.abs(ad) > config.swipeMinimumAngleDifference) {
-        // reset branch
-        activeBranches = [...currentBranch];
-        currentBranch = [];
-        lastBranchedChar = activeChar;
-      }
-    }
-
-    refAngle = a;
-    refPosition = _objectSpread2({}, state.mousePos);
-  }
-};
-
-const getAngleDifference = (a, b) => {
-  return Math.atan2(Math.sin(a - b), Math.cos(a - b));
-};
-
-const getSuggestions = () => {
-  const lastChar = charArray[charArray.length - 1];
-  const suggestions = wordsFound.filter(word => {
-    const lastCharInWord = word.charAt(word.length - 1);
-    return lastCharInWord === lastChar;
-  });
-  suggestions.sort(function (a, b) {
-    return b.length - a.length;
-  });
-  state.suggestions = suggestions;
-};
-
-const resetAngleFinder = () => {
-  refPosition = null;
-  refAngle = null;
-  lastBranchedChar = null;
-};
-
-const pushSwipePoint = () => {
-  if (!state.swipeActive) return;
-  const lastSwipePoint = state.swipePoints[state.swipePoints.length - 1];
-
-  if (lastSwipePoint) {
-    const nextPointDiff = getDistance(lastSwipePoint, state.mousePos);
-    if (nextPointDiff > config.swipeMinimumVectorLength) return;
-  }
-
-  state.swipePoints.push(_objectSpread2(_objectSpread2({}, state.mousePos), {}, {
-    t: Date.now()
-  }));
-};
-
-const reset = () => {
-  charArray = [];
-  activeBranches = [];
-  currentBranch = [];
-  wordsFound = [];
-  startPosition = null;
-  resetAngleFinder();
-  state.swipeActive = false;
-};
 
 const checkKeyboardCollision = () => {
   const {
@@ -1937,12 +2297,44 @@ const checkKeyboardCollision = () => {
         state.activeElement.hover = true;
         state.activeElement.down = state.mouseDown;
         if (state.activeElement.down) setHoldTimeout();else clearHoldTimeout();
-        draw();
+        state.stateChange = true;
       } // we found a key, return
 
 
       return state.activeElement;
     }
+  }
+};
+const checkSuggestionCollision = () => {
+  const {
+    x,
+    y
+  } = state.mousePos;
+  const startY = calculateStartY() - state.buttonHeight - state.margin * 3;
+  const {
+    suggestions,
+    suggestionSize,
+    totalWidth
+  } = getSuggestionInfo();
+  let tx = element.width / 2 - totalWidth / 2;
+
+  for (let i = 0; i < suggestions.length; i++) {
+    const suggestion = suggestions[i];
+
+    if (x > tx && x < tx + suggestionSize && y > startY && y < startY + state.buttonHeight) {
+      if (!state.activeSuggestionElement || state.activeSuggestionElement !== suggestion || state.activeSuggestionElement.down !== state.mouseDown) {
+        if (state.activeSuggestionElement === suggestion && state.activeSuggestionElement.down && !state.mouseDown) return keyPress(state.activeSuggestionElement);
+        clearActiveSuggestionElement();
+        state.activeSuggestionElement = suggestion;
+        state.activeSuggestionElement.hover = true;
+        state.activeSuggestionElement.down = state.mouseDown;
+        state.stateChange = true;
+      }
+
+      return state.activeSuggestionElement;
+    }
+
+    tx += suggestionSize + state.margin;
   }
 };
 const checkPopupKeyCollision = () => {
@@ -2002,7 +2394,7 @@ const checkPopupKeyCollision = () => {
     state.activePopupElement = closestKey;
     state.activePopupElement.hover = true;
     state.activePopupElement.down = true;
-    draw();
+    state.stateChange = true;
   } // inside big rectangle
 
 
@@ -2024,6 +2416,13 @@ const clearActiveElement = () => {
     state.activeElement = null;
   }
 };
+const clearActiveSuggestionElement = () => {
+  if (state.activeSuggestionElement) {
+    state.activeSuggestionElement.hover = false;
+    state.activeSuggestionElement.down = false;
+    state.activeSuggestionElement = null;
+  }
+};
 
 const clearActivePopupElement = () => {
   if (state.activePopupElement) {
@@ -2042,13 +2441,27 @@ const clearHoldTimeout = () => {
 const setHoldTimeout = () => {
   clearHoldTimeout();
   state.holdTimeout = setTimeout(() => {
+    if (state.swipeActive) return;
     state.keyPopup = true;
     clearActivePopupElement();
     checkPopupKeyCollision();
+    draw();
 
     if (state.activeElement && state.activeElement.char === 'bksp') {
       state.bkspInterval = setInterval(() => {
-        if (state.activeElement) dispatchEvent(state.activeElement.char);
+        if (state.activeElement) {
+          dispatchEvent(state.activeElement);
+
+          if (config.swipe) {
+            const previousUninterruptedString = state.uninterruptedString;
+            state.uninterruptedString = state.uninterruptedString.substr(0, state.uninterruptedString.length - 1);
+
+            if (previousUninterruptedString !== state.uninterruptedString) {
+              end();
+              draw();
+            }
+          }
+        }
       }, config.bkspIntervalTime);
     }
   }, config.holdPopupTime);
@@ -2056,10 +2469,15 @@ const setHoldTimeout = () => {
 
 const keyPress = key => {
   clearActivePopupElement();
+  clearActiveSuggestionElement();
   clearActiveElement();
   clearHoldTimeout();
-  let drawn = true;
-  dispatchEvent(key.char, state.shiftDown);
+  if (state.swipeActive) return;
+  dispatchEvent(key, state.shiftDown);
+
+  if (key.suggestion) {
+    resetSuggestions();
+  }
 
   switch (key.char) {
     case 'abc':
@@ -2090,7 +2508,7 @@ const keyPress = key => {
         state.shiftDownTime = Date.now();
       }
 
-      drawn = false;
+      state.stateChange = true;
       break;
 
     case 'lang':
@@ -2111,13 +2529,26 @@ const keyPress = key => {
         selectLanguage(key.char.toLowerCase());
       } else {
         if (state.shiftDown && !state.permaShift) state.shiftDown = false;
-        drawn = false;
+
+        if (config.swipe) {
+          if (['space', 'enter'].includes(key.char)) resetSuggestions();
+
+          if (key.char === 'bksp') {
+            state.uninterruptedString = state.uninterruptedString.substr(0, state.uninterruptedString.length - 1);
+          } else if (state.swipePlacedWord) {
+            state.uninterruptedString = '';
+          }
+
+          if (state.currentLayout === state.selectedLanguage && key.char.length <= 2) state.uninterruptedString += key.char;
+        }
+
+        state.stateChange = true;
       }
 
       break;
   }
 
-  if (!drawn) draw();
+  state.swipePlacedWord = false;
   return key;
 };
 
@@ -2131,9 +2562,15 @@ const setMouseDown = (bool, x, y) => {
   state.mouseDown = bool;
   if (x !== undefined) setMousePos(x, y);else setMousePos(state.mousePos.x, state.mousePos.y);
 
-  if (!state.mouseDown) {
-    end();
-    console.log('Suggestions:', state.suggestions);
+  if (!state.mouseDown && state.swipeActive) {
+    if (state.suggestions.length > 0) {
+      const suggestionKey = state.suggestions.shift();
+      dispatchEvent(suggestionKey, state.shiftDown);
+      state.uninterruptedString = suggestionKey.char;
+      state.swipePlacedWord = true;
+    }
+
+    state.swipeActive = false;
   }
 };
 const setMousePosFromUV = (x, y) => {
@@ -2144,16 +2581,24 @@ const setMousePos = (x, y) => {
   state.mousePos.y = y;
   let foundKey;
   if (state.keyPopup) foundKey = checkPopupKeyCollision();
+  if (!foundKey && config.swipe) foundKey = checkSuggestionCollision();
   if (!foundKey) foundKey = checkKeyboardCollision();
+  if (config.swipe && state.mouseDown && !state.keyPopup) move();
 
-  if (state.mouseDown) {
-    move();
-  }
-
-  if (!foundKey && state.activeElement) {
+  if (!foundKey && (state.activeElement || state.activeSuggestionElement)) {
     clearActiveElement();
-    draw();
+    clearActiveSuggestionElement();
+    state.stateChange = true;
   }
+
+  if (config.swipe && !state.mouseDown && state.previousMouseState) {
+    // a bit dirty but we need the keypress info, and we dont want to draw 2 times.
+    if (!state.keyPopup) end();
+    state.stateChange = true;
+  }
+
+  state.previousMouseState = state.mouseDown;
+  if (state.stateChange) draw();
 };
 const addListeners = () => {
   const getCanvasPosition = (x, y) => {
@@ -2197,15 +2642,15 @@ const setTextureDirty = bool => {
   state.textureDirty = bool;
 };
 const getTextureDirty = () => state.textureDirty;
+const resetSuggestionInput = resetSuggestions;
 const init$1 = _config => {
   Object.assign(config, _config);
   init();
-  load().then(() => {});
+  setScreenSizeFromAspectRatio();
+  selectLanguage(config.language);
   loadSVGs().then(() => {
     draw();
   });
-  setScreenSizeFromAspectRatio();
-  selectLanguage(config.language);
 };
 
-export { addListeners, events, getActiveElement, getCanvas, getTextureDirty, init$1 as init, selectLanguage$1 as selectLanguage, setLayout$1 as setLayout, setMouseDown, setMousePos, setMousePosFromUV, setScreenSizeFromAspectRatio$1 as setScreenSizeFromAspectRatio, setScreenSizeInPixels$1 as setScreenSizeInPixels, setTextureDirty };
+export { addListeners, events, getActiveElement, getCanvas, getTextureDirty, init$1 as init, resetSuggestionInput, selectLanguage$1 as selectLanguage, setLayout$1 as setLayout, setMouseDown, setMousePos, setMousePosFromUV, setScreenSizeFromAspectRatio$1 as setScreenSizeFromAspectRatio, setScreenSizeInPixels$1 as setScreenSizeInPixels, setTextureDirty };

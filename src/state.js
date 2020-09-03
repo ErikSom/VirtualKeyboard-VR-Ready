@@ -2,7 +2,9 @@ const state = {
 	canvas:document.createElement('canvas'),
 	activeElement:null,
 	activePopupElement:null,
+	activeSuggestionElement:null,
 	mouseDown:false,
+	previousMouseState:false,
 	mousePos:{x:0, y:0},
 	textureDirty:true,
 	selectedLanguage:null,
@@ -21,7 +23,10 @@ const state = {
 	swipeActive:false,
 	swipePoints:[],
 	swipeDrawInterval:null,
+	swipePlacedWord:false,
+	swipeLoadingProgress:0,
 	suggestions:[],
-
+	uninterruptedString:'',
+	stateChange:false,
 }
 export default state;
