@@ -42,6 +42,7 @@ Example configuration (all fields are optional):
 		buttonHeight: 40,
 		buttonRadius: 5,
 		language:'en', // the default language
+		languages:['en', 'fr', 'es', 'ru'],
 		font:'sans-serif',
 		align: 'center', // center or bottom
 		colors:{
@@ -62,21 +63,35 @@ Example configuration (all fields are optional):
 			shadowOffsetX:0,
 			shadowOffsetY:2,
 		},
-		holdPopupTime:300, // the time it takes for the hold popup to show
-		bkspIntervalTime:50, // the interval between backspaces when the backspace is pressed
+		holdPopupTime:300,
+		bkspIntervalTime:50,
+		shiftDoubleTapTimeout:300,
+
+		// swipe settings
+		swipe:true, // defaults to true
+		swipeMinimumAngleDifference:Math.PI/4, // 30 degree
+		swipeMinimumDistance:20,
+		swipeDrawingLifeTime:500,
+		swipeDrawingSize:6,
+		swipeLoadingFontSize:12,
+		suggestionCrawlStep:100, // how many words the application processes per tick (higher == lower performance)
     }
+
+#### getCanvas()
+
+Returns the draw canvas
 
 #### selectLanguage(language)
 
 language:string
 
-selects the keyboard language, available options: 'en', 'ru'
+Selects the keyboard language, available options: 'en', 'ru'
 
 #### setLayout(name)
 
 name:string
 
-selects the keyboard layout, available options: 'num', 'nump', 'sym'
+Selects the keyboard layout, available options: 'num', 'nump', 'sym'
 
 
 #### setMouseDown(down, [x], [y])
@@ -116,6 +131,9 @@ Sets the width and height of the render canvas + the resolution based on the dev
 
 Sets the size from the aspect property provided in the init() function. The setScreenSizeFromAspectRatio() is automatically called on init.
 
+#### getTextureDirty()
+
+TextureDirty will be set to true when the image has changed. You need to set textureDirty to false yourself when you update your texture.
 
 #### setTextureDirty(dirty)
 
@@ -126,9 +144,6 @@ Sets the textureDirty property on the VRKeyboard.
 
 Adds mouse / touch listeners to the canvas. Only works if the canvas is displayed in the dom. (will not work for ThreeJS)
 
+#### resetSuggestionInput()
 
-### Properties
-
-#### textureDirty
-
-textureDirty will be set to true when the image has changed. You need to set textureDirty to false yourself when you update your texture.
+Resets the suggestion state, useful when switching between text elements and wanting to clear the old state
