@@ -22,6 +22,7 @@ let currentXHR = null;
 
 export const load = ()=>{
 	initialized = false;
+	resetSuggestions();
 	if(map[state.selectedLanguage] !== undefined){
 		return loadingFinished();
 	}
@@ -103,7 +104,6 @@ const buildSpecialCharacterMap = ()=>{
 
 export const move = () => {
 	if(!initialized) return;
-
 	if(!startPosition) startPosition = {...state.mousePos};
 
 	const startPosDifference = helper.getDistance(state.mousePos, startPosition);
@@ -267,6 +267,7 @@ const setSuggestions = suggestions =>{
 export const resetSuggestions = ()=>{
 	state.suggestions = [];
 	state.uninterruptedString = '';
+	draw();
 }
 const resetAngleFinder = ()=>{
 	refPosition = null;

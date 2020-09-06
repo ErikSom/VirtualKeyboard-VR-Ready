@@ -38,6 +38,11 @@
         window.VRKeyboard.init({align:'bottom'});
         window.VRKeyboard.addListeners();
 
+        document.querySelectorAll('input').forEach(input => {
+            // on blur reset the suggestion state
+            input.onblur = window.VRKeyboard.resetSuggestionInput;
+        })
+
         // by setting the height to 0 the keyboard will calculate the minimum height it requires to display based on the configured buttonHeight and margin
         // any height below the minimum required height will force the minimum height.
         window.VRKeyboard.setScreenSizeInPixels(window.innerWidth, 0, window.devicePixelRatio);
