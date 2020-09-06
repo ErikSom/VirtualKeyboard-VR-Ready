@@ -36,7 +36,9 @@
             canvas = window.VRKeyboard.getCanvas();
             window.VRKeyboard.init({
                 resolution: 2,
-                aspect: 1
+                aspect: 1,
+                // we increase the minimum movement required on a key because the keyboard is rotating by itself in this demo, else swipe won't work well.
+                swipeMinimumVectorLength:8,
             });
 
             camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 1, 1000);
@@ -145,7 +147,9 @@
         }
 
         function onMouseDown(event) {
+            // make sure to set the mouse position before setting mouse down, else you will always start a swipe
             setMousePosition(event);
+
             window.VRKeyboard.setMouseDown(true);
 
             // we prevent default to not have the "save image" context menu open on mobile
@@ -153,16 +157,13 @@
         }
 
         function onMouseUp(event) {
-            if(event.touches){
-                mouse.x = -1000;
-                // since on mobile dont have a mouse, after a touch we should move the "mouse" out of the screen to not highlight buttons
-            }
             window.VRKeyboard.setMouseDown(false);
         }
 
         function onMouseMove(event) {
             setMousePosition(event);
         }
+
         function setMousePosition(event){
             var clientX, clientY;
             if(event.touches){
@@ -178,6 +179,7 @@
 
             mouse.x = (clientX / window.innerWidth) * 2 - 1;
             mouse.y = -(clientY / window.innerHeight) * 2 + 1;
+            setMousePosAtUV()
         }
 
         function onWindowResize() {
@@ -188,6 +190,25 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
 
             setCameraPosition();
+        }
+
+        function setMousePosAtUV(){
+            raycaster.setFromCamera(mouse, camera);
+
+            // calculate objects intersecting the picking ray
+            var intersects = raycaster.intersectObjects([mesh]);
+            var intersect = intersects[0];
+
+            // default the uvPos to 0,0 to ensure no buttons being highlighted when there is no intersection
+            var uvPos = new THREE.Vector2();
+
+            if(intersect){
+                var material = intersect.object.material;
+                var uvPos = material.map.transformUv(intersect.uv);
+            }
+
+            // here we set the keyboards internal mouse position to the uv
+            window.VRKeyboard.setMousePosFromUV(uvPos.x, uvPos.y);
         }
 
         function animate(time) {
@@ -206,30 +227,11 @@
                 textObject.rotation.y = Math.sin(time / hz) * ampl;
             }
 
-            raycaster.setFromCamera(mouse, camera);
-
-            // calculate objects intersecting the picking ray
-            var intersects = raycaster.intersectObjects([mesh]);
-
-            // default the uvPos to 0,0 to ensure no buttons being highlighted when there is no intersection
-            var uvPos = new THREE.Vector2();
-            for (var i = 0; i < intersects.length; i++) {
-
-                // if we intersect our plane, grab the uv from the material
-                var intersect = intersects[0];
-                var material = intersect.object.material;
-                var uvPos = material.map.transformUv(intersect.uv);
-            }
-            // here we set the keyboards internal mouse position to the uv
-            window.VRKeyboard.setMousePosFromUV(uvPos.x, uvPos.y);
-
             // detect if the keyboard texture is dirty, if so we need to update our canvas texture
             if (window.VRKeyboard.getTextureDirty()) {
                 texture.needsUpdate = true;
                 window.VRKeyboard.setTextureDirty(false);
             }
-
-
         }
     </script>
 </body>
