@@ -1,6 +1,6 @@
 {
   "name": "virtualkeyboard-vr-ready",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A virtual keyboard heavily inspired by Google's Gboard. Build with WebXR/VR in mind.",
   "main": "src/index.js",
   "author": "Erik Sombroek",
